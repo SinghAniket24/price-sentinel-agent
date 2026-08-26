@@ -1,9 +1,10 @@
-from tools.scraper_tool import get_webpage_content
+from tools.scraper_tool import search_product_across_stores
 
-# Test with a simple public URL
-test_url = "https://example.com"
-print(f"Testing scraper tool with: {test_url}\n")
+# Test with a sample product query
+test_query = "iphone 17"
+print(f"Testing scraper tool with query: '{test_query}'\n")
 
-result = get_webpage_content(test_url)
+results = search_product_across_stores(test_query)
 print("--- Scraped Result Preview ---")
-print(result[:500]) # Print the first 500 characters
+for result in results:
+    print(result)

@@ -1,26 +1,27 @@
-from storage.database import init_db, save_product_state, get_last_price
+from storage.database import init_db, save_best_price, get_last_best_price
 
 def main():
     print("Initializing database...")
     init_db()
 
-    url = "https://example.com/product-1"
-    title = "Test Product"
+    query = "iphone 17"
+    store = "Amazon"
+    title = "Apple iPhone 17 (128GB) - Midnight"
     initial_price = 1000.0
 
     print(f"Saving initial price: {initial_price}")
-    save_product_state(url, title, initial_price)
+    save_best_price(query, store, title, initial_price)
 
-    price, prod_title = get_last_price(url)
-    print(f"Retrieved from DB -> Title: {prod_title}, Price: {price}")
+    result = get_last_best_price(query)
+    print(f"Retrieved from DB -> Store: {result['store_name']}, Title: {result['title']}, Price: {result['price']}")
 
     # Test update (upsert)
     updated_price = 850.0
     print(f"Updating price to: {updated_price}")
-    save_product_state(url, title, updated_price)
+    save_best_price(query, store, title, updated_price)
 
-    new_price, _ = get_last_price(url)
-    print(f"Retrieved updated price: {new_price}")
+    result_updated = get_last_best_price(query)
+    print(f"Retrieved updated price: {result_updated['price']}")
 
 if __name__ == "__main__":
     main()
