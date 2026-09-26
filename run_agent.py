@@ -30,8 +30,12 @@ def main():
         result = compare_and_monitor(product_query)
         print("\n--- Final Agent Comparative Summary ---")
         print(result)
+        sys.exit(0)
     except Exception as e:
         print(f"\nExecution failed: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

@@ -1,5 +1,5 @@
 from smolagents import tool
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+# (sync_playwright import removed for async migration)
 import urllib.parse
 import re
 import time
@@ -104,12 +104,113 @@ def web_search_fallback(product_name: str) -> list:
                 if is_valid:
                     results.append({
                         "store": f"{store_name} (Fallback)",
+                        "store_name": f"{store_name} (Fallback)",
                         "title": title[:60] + "..." if len(title) > 60 else title,
                         "price": numeric_price,
+                        "url": href,
                         "error": None
                     })
     except Exception as e:
         pass
+    return results
+
+import asyncio
+from playwright.async_api import async_playwright, TimeoutError as AsyncPlaywrightTimeoutError
+
+async def async_scrape_store(store, product_name, context):
+    page = await context.new_page()
+    try:
+        await page.goto(store["url"], wait_until="domcontentloaded", timeout=15000)
+        await asyncio.sleep(2)
+        
+        page_title = await page.title()
+        price_text = None
+        numeric_price = None
+        product_url = store["url"]
+        
+        for selector in [".a-price .a-offscreen", ".a-price-whole", "div.Nx9bqj"]:
+            try:
+                elements = page.locator(selector)
+                count = await elements.count()
+                if count > 0:
+                    first = elements.first
+                    price_text = await first.inner_text()
+                    try:
+                        href = await first.evaluate("node => { let a = node.closest('a'); return a ? a.href : ''; }")
+                        if href:
+                            product_url = href
+                    except Exception:
+                        pass
+                    break
+            except Exception:
+                continue
+                
+        if price_text:
+            matches = re.findall(r'([\d,]+(?:\.\d+)?)', price_text)
+            if matches:
+                numeric_price = float(matches[0].replace(',', ''))
+        
+        if numeric_price is None:
+            body = page.locator("body")
+            body_text = await body.inner_text()
+            prices = re.findall(r'[\$£₹]\s*([\d,]+(?:\.\d+)?)', body_text)
+            if prices:
+                numeric_price = float(prices[0].replace(',', ''))
+        
+        short_title = page_title[:60] + "..." if len(page_title) > 60 else page_title
+        
+        is_valid, reason = is_valid_result(product_name, page_title, numeric_price, store["name"])
+        if not is_valid:
+            return {
+                "store": store["name"],
+                "store_name": store["name"],
+                "title": short_title,
+                "price": None,
+                "url": product_url,
+                "error": f"Filtered out: {reason}",
+                "original_price": numeric_price
+            }
+        else:
+            return {
+                "store": store["name"],
+                "store_name": store["name"],
+                "title": short_title,
+                "price": numeric_price,
+                "url": product_url,
+                "error": None
+            }
+            
+    except AsyncPlaywrightTimeoutError:
+        return {"store": store["name"], "store_name": store["name"], "title": None, "price": None, "url": store["url"], "error": "Timeout or blocked by bot protection."}
+    except Exception as e:
+        return {"store": store["name"], "store_name": store["name"], "title": None, "price": None, "url": store["url"], "error": str(e)}
+    finally:
+        await page.close()
+
+async def async_search_across_stores_runner(product_name: str, stores: list) -> list:
+    results = []
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled"]
+            )
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                viewport={"width": 1920, "height": 1080},
+                extra_http_headers={
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Accept": "text/html"
+                }
+            )
+            
+            tasks = [async_scrape_store(store, product_name, context) for store in stores]
+            results = list(await asyncio.gather(*tasks))
+            
+            await browser.close()
+    except Exception as e:
+        results.append({"store": "System", "store_name": "System", "title": None, "price": None, "error": f"Critical Playwright failure: {str(e)}"})
+        
     return results
 
 @tool
@@ -137,84 +238,16 @@ def search_product_across_stores(product_name: str) -> list:
         }
     ]
     
-    results = []
-    
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=True,
-                args=["--disable-blink-features=AutomationControlled"]
-            )
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-                viewport={"width": 1920, "height": 1080},
-                extra_http_headers={
-                    "Accept-Language": "en-US,en;q=0.9",
-                    "Accept": "text/html"
-                }
-            )
-            
-            for store in stores:
-                page = context.new_page()
-                try:
-                    page.goto(store["url"], wait_until="domcontentloaded", timeout=15000)
-                    time.sleep(2)
-                    
-                    page_title = page.title()
-                    price_text = None
-                    numeric_price = None
-                    
-                    for selector in [".a-price .a-offscreen", ".a-price-whole", "div.Nx9bqj"]:
-                        try:
-                            elements = page.locator(selector)
-                            if elements.count() > 0:
-                                price_text = elements.first.inner_text()
-                                break
-                        except Exception:
-                            continue
-                            
-                    if price_text:
-                        matches = re.findall(r'([\d,]+(?:\.\d+)?)', price_text)
-                        if matches:
-                            numeric_price = float(matches[0].replace(',', ''))
-                    
-                    if numeric_price is None:
-                        body_text = page.locator("body").inner_text()
-                        prices = re.findall(r'[\$£₹]\s*([\d,]+(?:\.\d+)?)', body_text)
-                        if prices:
-                            numeric_price = float(prices[0].replace(',', ''))
-                    
-                    short_title = page_title[:60] + "..." if len(page_title) > 60 else page_title
-                    
-                    is_valid, reason = is_valid_result(product_name, page_title, numeric_price, store["name"])
-                    if not is_valid:
-                        results.append({
-                            "store": store["name"],
-                            "title": short_title,
-                            "price": None,
-                            "error": f"Filtered out: {reason}",
-                            "original_price": numeric_price
-                        })
-                    else:
-                        results.append({
-                            "store": store["name"],
-                            "title": short_title,
-                            "price": numeric_price,
-                            "error": None
-                        })
-                    
-                except PlaywrightTimeoutError:
-                    results.append({"store": store["name"], "title": None, "price": None, "error": "Timeout or blocked by bot protection."})
-                except Exception as e:
-                    results.append({"store": store["name"], "title": None, "price": None, "error": str(e)})
-                finally:
-                    page.close()
-                    
-            browser.close()
-            
+        results = asyncio.run(async_search_across_stores_runner(product_name, stores))
     except Exception as e:
-        results.append({"store": "System", "title": None, "price": None, "error": f"Critical Playwright failure: {str(e)}"})
-
+        # Check if an event loop is already running, which asyncio.run doesn't like
+        try:
+            loop = asyncio.get_running_loop()
+            results = loop.run_until_complete(async_search_across_stores_runner(product_name, stores))
+        except Exception:
+            results = [{"store": "System", "store_name": "System", "title": None, "price": None, "error": f"Event loop error: {str(e)}"}]
+    
     # Check if we need fallback
     valid_results = [r for r in results if r.get("price") is not None and r.get("error") is None]
     if not valid_results:

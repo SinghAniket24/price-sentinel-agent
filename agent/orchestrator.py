@@ -34,21 +34,30 @@ def compare_and_monitor(product_name: str) -> str:
         
     prompt = f"""
     You are an autonomous multi-store price comparator agent.
-    
-    Your task:
-    1. Use the `search_product_across_stores` tool to search for the product: "{product_name}".
-       This tool returns a list of dictionaries containing prices across Amazon, Flipkart, etc.
-    2. Analyze the returned list. Note any listings that were filtered out (where 'error' indicates they were filtered or invalid).
-    3. If direct scraping returns invalid data or no valid listings, invoke the `web_search_fallback` tool to find alternative prices before making a final decision.
-    4. Identify which store currently offers the absolute lowest numeric `price` among the VALID results (ignore None or error results).
-       - IMPORTANT: If ALL stores (and fallbacks) returned invalid or filtered-out prices, DO NOT save any price to the database. Instead, return a summary stating that no valid prices were found due to filtering, and gracefully halt further processing.
-    4. {history_context}
-    5. Compare the new lowest price against the historical lowest price (if it exists) to evaluate market shifts (e.g. Price Dropped, Increased, or New Record).
-    6. Execute EXACTLY the following Python code to save the valid data:
+
+    {history_context}
+
+    Your task MUST be executed in a SINGLE, cohesive execution block of code:
+    1. Call `search_product_across_stores(product_name="{product_name}")`.
+    2. Immediately loop through the returned list. Treat a listing as valid if and only if it has a valid numeric `price` and its `error` is `None`.
+    3. If zero valid listings are returned across all primary stores, ONLY THEN call `web_search_fallback(product_name="{product_name}")` and loop through its results.
+    4. Find the absolute lowest valid price across all stores.
+    5. If a valid lowest price is found, immediately execute the save command:
        `from storage.database import save_best_price`
-       `save_best_price(product_query="{product_name}", store_name=..., title=..., price=...)`
-    7. Return a comprehensive structured summary detailing the stores checked, filtered out outliers, the winning store, the price comparison, and your market shift evaluation.
+       `save_best_price(product_query="{product_name}", store_name=winning_store, title=winning_title, price=winning_price, url=winning_url)`
+    6. Formulate your final answer. Your final answer MUST explicitly state:
+       - The winning store and winning price.
+       - A comparison against the historical price to evaluate market shifts.
+       - A strict confirmation that the winning result was saved to the database.
     """
     
-    result = agent.run(prompt)
-    return result
+    max_retries = 2
+    for attempt in range(max_retries + 1):
+        try:
+            result = agent.run(prompt)
+            return result
+        except Exception as e:
+            if attempt < max_retries:
+                print(f"Agent execution failed on attempt {attempt + 1}. Retrying... ({str(e)})")
+            else:
+                raise RuntimeError(f"Agent execution completely failed after {max_retries + 1} attempts. Last error: {str(e)}")
