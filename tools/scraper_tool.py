@@ -137,6 +137,8 @@ async def async_scrape_store(store, product_name, context):
                     price_text = await first.inner_text()
                     try:
                         href = await first.evaluate("node => { let a = node.closest('a'); return a ? a.href : ''; }")
+                        if not href:
+                            href = await first.evaluate("node => { let parent = node.parentElement; while(parent && parent.tagName !== 'BODY') { let a = parent.querySelector('a'); if (a && a.href && !a.href.includes('search')) return a.href; parent = parent.parentElement; } return ''; }")
                         if href:
                             product_url = href
                     except Exception:

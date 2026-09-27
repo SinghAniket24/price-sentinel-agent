@@ -93,6 +93,11 @@ def load_and_sanitize_data():
             return False
         if pd.isna(row['price']):
             return False
+        if pd.isna(row['url']) or not str(row['url']).startswith('http'):
+            return False
+        if 'search?q=' in str(row['url']) or 's?k=' in str(row['url']):
+            # Filter out search result pages that aren't product pages
+            return False
         return True
 
     df = df[df.apply(is_valid_row, axis=1)]
