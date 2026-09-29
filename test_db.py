@@ -6,14 +6,18 @@ from storage.database import init_db, save_best_price, get_last_best_price, get_
 
 class TestDatabase(unittest.TestCase):
     def setUp(self):
-        # We will use the actual DB path but clear it out for testing
-        if os.path.exists(DB_PATH):
-            os.remove(DB_PATH)
+        # Use a separate test DB
+        self.test_db_path = "data/test_price_watch.db"
+        import storage.database
+        storage.database.DB_PATH = self.test_db_path
+        
+        if os.path.exists(self.test_db_path):
+            os.remove(self.test_db_path)
         init_db()
 
     def tearDown(self):
-        if os.path.exists(DB_PATH):
-            os.remove(DB_PATH)
+        if os.path.exists(self.test_db_path):
+            os.remove(self.test_db_path)
 
     def test_init_db(self):
         with get_db_connection() as conn:

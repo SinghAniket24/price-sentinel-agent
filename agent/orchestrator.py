@@ -41,14 +41,15 @@ def compare_and_monitor(product_name: str) -> str:
     1. Call `search_product_across_stores(product_name="{product_name}")`.
     2. Immediately loop through the returned list. Treat a listing as valid if and only if it has a valid numeric `price` and its `error` is `None`.
     3. If zero valid listings are returned across all primary stores, ONLY THEN call `web_search_fallback(product_name="{product_name}")` and loop through its results.
-    4. Find the absolute lowest valid price across all stores.
-    5. If a valid lowest price is found, immediately execute the save command:
+    4. Save ALL valid listings to the database by executing:
        `from storage.database import save_best_price`
-       `save_best_price(product_query="{product_name}", store_name=winning_store, title=winning_title, price=winning_price, url=winning_url, currency=winning_currency)`
+       For each valid listing, call:
+       `save_best_price(product_query="{product_name}", store_name=listing['store_name'], title=listing['title'], price=listing['price'], url=listing['url'], currency=listing['currency'])`
+    5. Find the absolute lowest valid price across all valid listings to declare the winner.
     6. Formulate your final answer. Your final answer MUST explicitly state:
        - The winning store and winning price.
        - A comparison against the historical price to evaluate market shifts.
-       - A strict confirmation that the winning result was saved to the database.
+       - A strict confirmation that ALL valid results were saved to the database.
     """
     
     max_retries = 2
