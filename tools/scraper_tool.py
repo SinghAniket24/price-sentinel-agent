@@ -8,7 +8,7 @@ try:
 except ImportError:
     DDGS = None
 
-def is_valid_result(query: str, title: str, price: float, store: str) -> tuple[bool, str]:
+def is_valid_result(query: str, title: str, price: float, store: str, currency: str = "Unknown") -> tuple[bool, str]:
     if not title:
         return False, "Missing title"
     if price is None:
@@ -28,7 +28,7 @@ def is_valid_result(query: str, title: str, price: float, store: str) -> tuple[b
         if match_count == 0:
             return False, "Title missing query intent"
 
-    is_inr = (store.lower() in ["flipkart", "croma"]) or ("inr" in store.lower()) or (price > 3000)
+    is_inr = (store.lower() in ["flipkart", "croma"]) or ("inr" in store.lower()) or (currency == "INR")
     is_accessory_query = any(word in query_lower for word in exclude_words)
     is_flagship = any(brand in query_lower for brand in ["iphone", "macbook", "galaxy s", "galaxy z", "pixel", "ipad", "fold"])
     is_mid_range = any(brand in query_lower for brand in ["redmi", "poco", "moto", "realme", "iqoo", "galaxy a", "galaxy m", "nord", "nothing"])
@@ -85,12 +85,19 @@ def web_search_fallback(product_name: str) -> list:
             
             # Extract price from snippet or title
             text_to_search = title + " " + snippet
-            prices = re.findall(r'[\$£₹]\s*([\d,]+(?:\.\d+)?)', text_to_search)
+            currency = "Unknown"
+            
+            prices = re.findall(r'([\$£₹])\s*([\d,]+(?:\.\d+)?)', text_to_search)
             if not prices:
-                prices = re.findall(r'(?:Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)', text_to_search, re.IGNORECASE)
+                prices = re.findall(r'(Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)', text_to_search, re.IGNORECASE)
                 
             if prices:
-                numeric_price = float(prices[0].replace(',', ''))
+                sym = prices[0][0].upper()
+                if sym == '$': currency = "USD"
+                elif sym == '£': currency = "GBP"
+                elif sym in ['₹', 'RS', 'RS.', 'INR']: currency = "INR"
+                
+                numeric_price = float(prices[0][1].replace(',', ''))
                 
                 store_name = "WebSearch"
                 if "amazon" in href.lower() or "amazon" in title.lower():
@@ -100,13 +107,14 @@ def web_search_fallback(product_name: str) -> list:
                 elif "croma" in href.lower() or "croma" in title.lower():
                     store_name = "Croma"
                     
-                is_valid, reason = is_valid_result(product_name, title, numeric_price, store_name)
+                is_valid, reason = is_valid_result(product_name, title, numeric_price, store_name, currency)
                 if is_valid:
                     results.append({
                         "store": f"{store_name} (Fallback)",
                         "store_name": f"{store_name} (Fallback)",
                         "title": title[:60] + "..." if len(title) > 60 else title,
                         "price": numeric_price,
+                        "currency": currency,
                         "url": href,
                         "error": None
                     })
@@ -147,7 +155,13 @@ async def async_scrape_store(store, product_name, context):
             except Exception:
                 continue
                 
+        currency = "Unknown"
+        
         if price_text:
+            if '₹' in price_text or 'Rs' in price_text: currency = "INR"
+            elif '$' in price_text: currency = "USD"
+            elif '£' in price_text: currency = "GBP"
+            
             matches = re.findall(r'([\d,]+(?:\.\d+)?)', price_text)
             if matches:
                 numeric_price = float(matches[0].replace(',', ''))
@@ -155,19 +169,34 @@ async def async_scrape_store(store, product_name, context):
         if numeric_price is None:
             body = page.locator("body")
             body_text = await body.inner_text()
-            prices = re.findall(r'[\$£₹]\s*([\d,]+(?:\.\d+)?)', body_text)
+            prices = re.findall(r'([\$£₹])\s*([\d,]+(?:\.\d+)?)', body_text)
+            if not prices:
+                prices = re.findall(r'(Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)', body_text, re.IGNORECASE)
+                
             if prices:
-                numeric_price = float(prices[0].replace(',', ''))
+                sym = prices[0][0].upper()
+                if sym == '$': currency = "USD"
+                elif sym == '£': currency = "GBP"
+                elif sym in ['₹', 'RS', 'RS.', 'INR']: currency = "INR"
+                numeric_price = float(prices[0][1].replace(',', ''))
+        
+        # Fallback if domain explicitly gives it away and no currency symbol found
+        if currency == "Unknown" and store.get("url"):
+            if ".in" in store["url"] or "flipkart" in store["url"].lower():
+                currency = "INR"
+            elif ".com" in store["url"]:
+                currency = "USD"
         
         short_title = page_title[:60] + "..." if len(page_title) > 60 else page_title
         
-        is_valid, reason = is_valid_result(product_name, page_title, numeric_price, store["name"])
+        is_valid, reason = is_valid_result(product_name, page_title, numeric_price, store["name"], currency)
         if not is_valid:
             return {
                 "store": store["name"],
                 "store_name": store["name"],
                 "title": short_title,
                 "price": None,
+                "currency": currency,
                 "url": product_url,
                 "error": f"Filtered out: {reason}",
                 "original_price": numeric_price
@@ -178,6 +207,7 @@ async def async_scrape_store(store, product_name, context):
                 "store_name": store["name"],
                 "title": short_title,
                 "price": numeric_price,
+                "currency": currency,
                 "url": product_url,
                 "error": None
             }
@@ -232,7 +262,7 @@ def search_product_across_stores(product_name: str) -> list:
     stores = [
         {
             "name": "Amazon",
-            "url": f"https://www.amazon.com/s?k={encoded_query}",
+            "url": f"https://www.amazon.in/s?k={encoded_query}",
         },
         {
             "name": "Flipkart",

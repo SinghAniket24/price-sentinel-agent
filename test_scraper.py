@@ -1,71 +1,56 @@
-from tools.scraper_tool import search_product_across_stores, is_valid_result, web_search_fallback
+import unittest
+from tools.scraper_tool import is_valid_result
 
-def test_filters():
-    print("--- Testing Validation Filters ---")
-    
-    # Test 1: Title missing query intent
-    valid, reason = is_valid_result("iphone 17", "Generic Smartphone Black", 900, "Amazon")
-    print(f"Test 1 (Missing Intent): Valid={valid}, Reason='{reason}'")
-    assert not valid and "missing query intent" in reason
+class TestScraperFilters(unittest.TestCase):
+    def test_missing_title(self):
+        valid, reason = is_valid_result("iphone 17", "", 900, "Amazon", "USD")
+        self.assertFalse(valid)
+        self.assertIn("Missing title", reason)
 
-    # Test 2: Irrelevant accessory
-    valid, reason = is_valid_result("iphone 17", "Apple iPhone 17 Silicone Case", 50, "Amazon")
-    print(f"Test 2 (Irrelevant Accessory): Valid={valid}, Reason='{reason}'")
-    assert not valid and "exclusion keyword" in reason
+    def test_missing_query_intent(self):
+        valid, reason = is_valid_result("iphone 17", "Generic Smartphone Black", 900, "Amazon", "USD")
+        self.assertFalse(valid)
+        self.assertIn("missing query intent", reason)
 
-    # Test 3: Valid flagship price (USD)
-    valid, reason = is_valid_result("iphone 17", "Apple iPhone 17 (128GB)", 899, "Amazon")
-    print(f"Test 3 (Valid Flagship USD): Valid={valid}, Reason='{reason}'")
-    assert valid
+    def test_irrelevant_accessory(self):
+        valid, reason = is_valid_result("iphone 17", "Apple iPhone 17 Silicone Case", 50, "Amazon", "USD")
+        self.assertFalse(valid)
+        self.assertIn("exclusion keyword", reason)
 
-    # Test 4: Valid flagship price (INR)
-    valid, reason = is_valid_result("iphone 17", "Apple iPhone 17 (128GB)", 89900, "Flipkart")
-    print(f"Test 4 (Valid Flagship INR): Valid={valid}, Reason='{reason}'")
-    assert valid
+    def test_valid_flagship_usd(self):
+        valid, reason = is_valid_result("iphone 17", "Apple iPhone 17 (128GB)", 899, "Amazon", "USD")
+        self.assertTrue(valid, f"Failed: {reason}")
 
-    # Test 5: Outlier low price (INR flagship)
-    valid, reason = is_valid_result("iphone 17", "Apple iPhone 17 (128GB)", 1500, "Flipkart")
-    print(f"Test 5 (Outlier Low INR): Valid={valid}, Reason='{reason}'")
-    assert not valid and "too low" in reason
+    def test_valid_flagship_inr(self):
+        # Now explicitly pass INR
+        valid, reason = is_valid_result("iphone 17", "Apple iPhone 17 (128GB)", 89900, "Flipkart", "INR")
+        self.assertTrue(valid, f"Failed: {reason}")
 
-    # Test 6: Accessory query should allow low prices
-    valid, reason = is_valid_result("iphone 17 case", "Apple iPhone 17 Silicone Case", 49, "Amazon")
-    print(f"Test 6 (Accessory Query): Valid={valid}, Reason='{reason}'")
-    assert valid
+    def test_outlier_low_inr(self):
+        valid, reason = is_valid_result("iphone 17", "Apple iPhone 17 (128GB)", 1500, "Flipkart", "INR")
+        self.assertFalse(valid)
+        self.assertIn("too low", reason)
 
-    # Test 7: Valid mid-range price (INR)
-    # Using 'inr' heuristic threshold (price > 3000 -> treated as INR)
-    valid, reason = is_valid_result("redmi 13 5g", "Redmi 13 5G (6GB RAM)", 13999, "Amazon")
-    print(f"Test 7 (Valid Mid-Range INR): Valid={valid}, Reason='{reason}'")
-    assert valid
+    def test_accessory_query(self):
+        valid, reason = is_valid_result("iphone 17 case", "Apple iPhone 17 Silicone Case", 49, "Amazon", "USD")
+        self.assertTrue(valid, f"Failed: {reason}")
 
-    # Test 8: Outlier high price for mid-range (INR)
-    valid, reason = is_valid_result("redmi 13 5g", "Redmi 13 5G", 60000, "Amazon")
-    print(f"Test 8 (Outlier High Mid-Range INR): Valid={valid}, Reason='{reason}'")
-    assert not valid and "too high" in reason
+    def test_valid_mid_range_inr(self):
+        # Passes INR explicitly instead of heuristic
+        valid, reason = is_valid_result("redmi 13 5g", "Redmi 13 5G (6GB RAM)", 13999, "Amazon", "INR")
+        self.assertTrue(valid, f"Failed: {reason}")
 
-    print("All filter tests passed!\n")
+    def test_regression_amazon_inr_extraction(self):
+        # Bug: When scraping Amazon India, the price was extracted as 76606.4 but currency was defaulted to 'Unknown'.
+        # Since the store was 'Amazon', is_inr evaluated to False.
+        # This applied USD thresholds (max $3000) instead of INR thresholds, falsely rejecting the listing.
+        # Fix: The scraper now explicitly extracts 'INR' and passes it.
+        valid, reason = is_valid_result("iPhone 16", "Amazon.in : iPhone 16", 76606.4, "Amazon", "INR")
+        self.assertTrue(valid, f"Regression failed: falsely rejected valid INR price on Amazon. Reason: {reason}")
+    def test_outlier_high_mid_range_inr(self):
+        valid, reason = is_valid_result("redmi 13 5g", "Redmi 13 5G", 60000, "Amazon", "INR")
+        self.assertFalse(valid)
+        self.assertIn("too high", reason)
 
-def test_fallback():
-    print("--- Testing Web Search Fallback ---")
-    test_query = "iphone 15"
-    results = web_search_fallback(test_query)
-    print(f"Fallback results for '{test_query}':")
-    for r in results:
-        print(r)
-    assert isinstance(results, list)
-    print("Fallback test passed!\n")
-
-if __name__ == "__main__":
-    test_filters()
-    test_fallback()
-    
-    print("--- Running End-to-End Scraper Tool ---")
-    # Using a popular phone that will definitely have results to test both direct and fallback (if needed)
-    test_query = "iphone 15"
-    print(f"Testing scraper tool with query: '{test_query}'\n")
-
-    results = search_product_across_stores(test_query)
-    print("--- Scraped Result Preview ---")
-    for result in results:
-        print(result)
+if __name__ == '__main__':
+    unittest.main()

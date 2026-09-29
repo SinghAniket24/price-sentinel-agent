@@ -44,7 +44,7 @@ def compare_and_monitor(product_name: str) -> str:
     4. Find the absolute lowest valid price across all stores.
     5. If a valid lowest price is found, immediately execute the save command:
        `from storage.database import save_best_price`
-       `save_best_price(product_query="{product_name}", store_name=winning_store, title=winning_title, price=winning_price, url=winning_url)`
+       `save_best_price(product_query="{product_name}", store_name=winning_store, title=winning_title, price=winning_price, url=winning_url, currency=winning_currency)`
     6. Formulate your final answer. Your final answer MUST explicitly state:
        - The winning store and winning price.
        - A comparison against the historical price to evaluate market shifts.

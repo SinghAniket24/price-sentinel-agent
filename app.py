@@ -77,7 +77,7 @@ def load_and_sanitize_data():
         
     conn = sqlite3.connect(DB_PATH, timeout=10.0)
     
-    query = "SELECT id, product_query, store_name, title, price, url, timestamp FROM tracked_products ORDER BY timestamp DESC"
+    query = "SELECT id, product_query, store_name, title, price, currency, url, timestamp FROM price_history ORDER BY timestamp DESC"
     df = pd.read_sql(query, conn)
     conn.close()
     
@@ -137,8 +137,9 @@ if selected_product != "-- All Products --":
     col1, col2, col3 = st.columns(3)
     col1.metric("Winning Store", best_overall['store_name'])
     
-    # Auto-detect currency heuristically for display
-    currency_symbol = "₹" if best_overall['price'] > 3000 else "$"
+    # Use currency from DB or fallback
+    currency_str = best_overall.get('currency', 'Unknown')
+    currency_symbol = "₹" if currency_str == "INR" else ("$" if currency_str == "USD" else currency_str)
     col2.metric("Lowest Price", f"{currency_symbol} {best_overall['price']:,.2f}")
     
     col3.metric("Last Updated", best_overall['timestamp'].strftime('%Y-%m-%d %H:%M'))
@@ -178,7 +179,7 @@ st.divider()
 # --- Audit Log Table ---
 st.header("📋 Validated Audit Log")
 st.markdown("Sanitized historical price records cleanly extracted from the database.")
-display_df = df_filtered[['product_query', 'store_name', 'title', 'price', 'url', 'timestamp']].sort_values('timestamp', ascending=False)
+display_df = df_filtered[['product_query', 'store_name', 'title', 'price', 'currency', 'url', 'timestamp']].sort_values('timestamp', ascending=False)
 st.dataframe(
     display_df,
     width='stretch',
