@@ -1,57 +1,59 @@
-# Price Sentinel Agent
+# Price Sentinel
 
-A multi-store price comparator agent powered by `smolagents`. It scrapes major e-commerce platforms (Amazon India and Flipkart) to find the lowest prices, tracks historical price observations, and visualizes the data via a Streamlit dashboard.
+A tool that tracks and compares product prices across Amazon India and Flipkart. It uses `smolagents` to orchestrate searches, stores price history in SQLite, and provides a Streamlit dashboard for data visualization.
 
 ## Features
 
-- **Agent Orchestration**: Uses `smolagents` (with `Qwen/Qwen2.5-Coder-32B-Instruct`) to execute multi-store searches and data validation.
-- **Dynamic Scraping**: Uses asynchronous Playwright to extract prices and product details from Amazon India (amazon.in) and Flipkart.
-- **Web Search Fallback**: Falls back to DuckDuckGo web searches if direct scraping is blocked or returns invalid values.
-- **Historical Price Tracking**: Stores each successful price observation as a new timestamped record in a local SQLite database, maintaining a true price history. Includes explicit currency tracking.
-- **Streamlit Dashboard**: A UI to trigger live scrapes, view price histories, and compare prices across platforms.
+- Scrapes prices from Amazon India and Flipkart using asynchronous Playwright.
+- Falls back to DuckDuckGo search if direct scraping is blocked.
+- Stores historical price data and currency in a local SQLite database.
+- Provides a Streamlit dashboard to run new searches and visualize price trends.
+- Uses `Qwen/Qwen2.5-Coder-32B-Instruct` (via `smolagents`) to orchestrate searches and validate data.
 
 ## Prerequisites
 
 - Python 3.9+
-- A Hugging Face account and API token (`HF_TOKEN`) for the agent model.
+- Hugging Face API token (`HF_TOKEN`)
 
 ## Installation
 
-1. **Set up a virtual environment** (recommended):
+1. Create and activate a virtual environment:
    ```bash
    python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   # Linux/macOS
+   source venv/bin/activate  
+   # Windows
+   venv\Scripts\activate
    ```
 
-2. **Install dependencies**:
+2. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Install Playwright browsers**:
+3. Install Playwright browser binaries:
    ```bash
    playwright install chromium
    ```
 
-4. **Configure environment variables**:
-   Create a `.env` file in the root directory and add your Hugging Face token:
+4. Add your Hugging Face token to a `.env` file in the project root:
    ```env
-   HF_TOKEN=your_hugging_face_token_here
+   HF_TOKEN=your_token_here
    ```
 
 ## Usage
 
-### 1. Streamlit Dashboard (Recommended)
+### Dashboard
 
-Launch the interactive dashboard to trigger live searches and view price analytics.
+Start the Streamlit interface to search products and view price history:
 
 ```bash
 streamlit run app.py
 ```
 
-### 2. CLI Agent
+### CLI
 
-Run the agent directly from the command line for a quick price check.
+Run a single search from the command line:
 
 ```bash
 python run_agent.py "iphone 15"
@@ -59,17 +61,16 @@ python run_agent.py "iphone 15"
 
 ## Testing
 
-The project includes deterministic unit tests for database functions and scraper validation logic.
+Run the included unit tests:
 
-To run the tests:
 ```bash
 python -m unittest test_db.py test_scraper.py
 ```
 
-## Architecture
+## Stack
 
 - **Agent Framework**: `smolagents`
-- **Model**: `Qwen/Qwen2.5-Coder-32B-Instruct` (Inference API)
-- **Web Scraping**: Playwright (Async), DuckDuckGo Search (`ddgs`)
-- **Database**: SQLite3
+- **Model**: `Qwen/Qwen2.5-Coder-32B-Instruct`
+- **Web Scraping**: Playwright, DuckDuckGo Search (`ddgs`)
+- **Storage**: SQLite3
 - **Frontend**: Streamlit, Pandas, Altair
